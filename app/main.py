@@ -1,6 +1,5 @@
 from fastapi import FastAPI
+from app.api.success import router as success_router
 
 app = FastAPI(title="ChronusMatch")
-@app.get("/success")
-def success():
-    return {"message": "Success!"}
+app.include_router(success_router)
