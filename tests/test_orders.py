@@ -96,3 +96,30 @@ def test_cancel_nonexistent_order():
     )
 
     assert response.status_code == 404
+
+def test_create_order_with_zero_quantity():
+    response = client.post(
+        "/orders",
+        json={
+            "symbol": "TEST",
+            "side": "BUY",
+            "limit_price": "100.00",
+            "quantity": 0,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_order_with_negative_price():
+    response = client.post(
+        "/orders",
+        json={
+            "symbol": "TEST",
+            "side": "BUY",
+            "limit_price": "-10.00",
+            "quantity": 5,
+        },
+    )
+
+    assert response.status_code == 422
