@@ -140,3 +140,51 @@ def test_same_sell_price_uses_earlier_order_first():
 
     assert book.get_best_sell().order_id == "S1"
     assert book.sell_orders[1].order_id == "S2"
+
+
+import pytest
+
+
+def test_duplicate_order_id_is_rejected():
+    engine = MatchingEngine()
+
+    first = make_order("B1", OrderSide.BUY, 100, 5)
+    duplicate = make_order("B1", OrderSide.BUY, 99, 3)
+
+    engine.process_order(first)
+
+    with pytest.raises(ValueError, match="Duplicate order_id"):
+        engine.process_order(duplicate)
+
+
+def test_duplicate_order_id_across_symbols_is_rejected():
+    engine = MatchingEngine()
+
+    first = make_order("B1", OrderSide.BUY, 100, 5)
+    engine.process_order(first)
+
+    duplicate = Order(
+        order_id="B1",
+        symbol="OTHER",
+        side=OrderSide.BUY,
+        price=Decimal("99"),
+        quantity=3,
+    )
+
+    with pytest.raises(ValueError, match="Duplicate order_id"):
+        engine.process_order(duplicate)
+
+
+
+def test_zero_quantity_order_is_rejected():
+    with pytest.raises(ValueError, match="quantity must be positive"):
+        make_order("B_ZERO", OrderSide.BUY, 100, 0)
+
+
+def test_negative_price_order_is_rejected():
+    with pytest.raises(
+        ValueError,
+        match="price must be a positive finite Decimal",
+    ):
+        make_order("B_NEG", OrderSide.BUY, -10, 5)
+
