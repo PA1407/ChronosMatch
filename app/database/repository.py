@@ -166,3 +166,42 @@ def list_trades(limit: int = 100) -> list[dict]:
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+def get_order_stats():
+    with get_connection() as connection:
+        total_orders = connection.execute(
+            "SELECT COUNT(*) FROM orders"
+        ).fetchone()[0]
+
+        active_orders = connection.execute(
+            """
+            SELECT COUNT(*) FROM orders
+            WHERE status IN ('NEW', 'PARTIALLY_FILLED')
+            """
+        ).fetchone()[0]
+
+        filled_orders = connection.execute(
+            """
+            SELECT COUNT(*) FROM orders
+            WHERE status = 'FILLED'
+            """
+        ).fetchone()[0]
+
+        cancelled_orders = connection.execute(
+            """
+            SELECT COUNT(*) FROM orders
+            WHERE status = 'CANCELLED'
+            """
+        ).fetchone()[0]
+
+        total_trades = connection.execute(
+            "SELECT COUNT(*) FROM trades"
+        ).fetchone()[0]
+
+    return {
+        "total_orders": total_orders,
+        "active_orders": active_orders,
+        "filled_orders": filled_orders,
+        "cancelled_orders": cancelled_orders,
+        "total_trades": total_trades,
+    }
