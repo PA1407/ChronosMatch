@@ -188,3 +188,39 @@ def test_negative_price_order_is_rejected():
     ):
         make_order("B_NEG", OrderSide.BUY, -10, 5)
 
+
+
+def test_cancel_open_buy_order():
+    engine = MatchingEngine()
+    buy = make_order("B_CANCEL", OrderSide.BUY, 100, 5)
+
+    engine.process_order(buy)
+
+    result = engine.cancel_order("TEST", "B_CANCEL")
+
+    assert result is True
+    assert buy.order_status == OrderStatus.CANCELLED
+    assert engine.get_order("TEST", "B_CANCEL") is None
+
+
+def test_cancel_unknown_order_returns_false():
+    engine = MatchingEngine()
+
+    result = engine.cancel_order("TEST", "UNKNOWN")
+
+    assert result is False
+
+
+def test_filled_order_cannot_be_cancelled():
+    engine = MatchingEngine()
+
+    buy = make_order("B_FILLED", OrderSide.BUY, 100, 5)
+    sell = make_order("S_FILLED", OrderSide.SELL, 100, 5)
+
+    engine.process_order(buy)
+    engine.process_order(sell)
+
+    result = engine.cancel_order("TEST", "B_FILLED")
+
+    assert result is False
+    assert buy.order_status == OrderStatus.FILLED

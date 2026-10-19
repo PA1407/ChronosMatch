@@ -128,6 +128,26 @@ class MatchingEngine:
         if book is None:
             return None
         return book.get_order(order_id)
+    
+    
+    def cancel_order(self, symbol: str, order_id: str) -> bool:
+        """Cancel an order that is still resting in the order book."""
+        book = self.order_books.get(symbol)
+
+        if book is None:
+            return False
+
+        order = book.get_order(order_id)
+
+        if order is None:
+            return False
+
+        book.remove_order(order_id)
+        order.order_status = OrderStatus.CANCELLED
+        order.updated_at = utc_now()
+
+        return True
+
 
     def get_trades(self, symbol: str | None = None) -> list[Trade]:
         """Return all trades, optionally filtered by symbol."""
