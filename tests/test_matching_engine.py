@@ -224,3 +224,41 @@ def test_filled_order_cannot_be_cancelled():
 
     assert result is False
     assert buy.order_status == OrderStatus.FILLED
+
+
+def test_cancel_partially_filled_order():
+    engine = MatchingEngine()
+
+    buy = make_order("B_PARTIAL", OrderSide.BUY, 100, 10)
+    sell = make_order("S_PARTIAL", OrderSide.SELL, 100, 6)
+
+    engine.process_order(buy)
+    trades = engine.process_order(sell)
+
+    assert len(trades) == 1
+    assert buy.filled_quantity == 6
+    assert buy.remaining_quantity == 4
+    assert buy.order_status == OrderStatus.PARTIALLY_FILLED
+
+    result = engine.cancel_order("TEST", "B_PARTIAL")
+
+    assert result is True
+    assert buy.order_status == OrderStatus.CANCELLED
+    assert buy.filled_quantity == 6
+    assert buy.remaining_quantity == 4
+    assert engine.get_order("TEST", "B_PARTIAL") is None
+
+
+def test_cancel_open_sell_order():
+    engine = MatchingEngine()
+    sell = make_order("S_CANCEL", OrderSide.SELL, 105, 5)
+
+    engine.process_order(sell)
+
+    result = engine.cancel_order("TEST", "S_CANCEL")
+
+    assert result is True
+    assert sell.order_status == OrderStatus.CANCELLED
+    assert sell.remaining_quantity == 5
+    assert sell.filled_quantity == 0
+    assert engine.get_order("TEST", "S_CANCEL") is None
