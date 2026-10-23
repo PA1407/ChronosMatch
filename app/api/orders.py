@@ -1,21 +1,12 @@
 
-from uuid import uuid4
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, HTTPException, status
 
-from app.schemas.order import OrderCreate, OrderResponse, OrderStatus
-from app.database.repository import (
-    create_order as save_order,
-    get_order as find_order,
-    update_order,
-)
+from app.schemas.order import OrderCreate, OrderResponse
+from app.database.repository import get_order as find_order
+from app.database.repository import update_order
+from app.services.order_service import submit_order, matching_engine
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
-
-
-def current_time():
-    return datetime.now(timezone.utc).isoformat()
 
 
 def to_response(record: dict) -> OrderResponse:
@@ -36,22 +27,14 @@ def to_response(record: dict) -> OrderResponse:
     status_code=status.HTTP_201_CREATED,
 )
 def create_order(order: OrderCreate):
-    now = current_time()
-
-    order_data = {
-        "order_id": str(uuid4()),
-        "symbol": order.symbol,
-        "side": order.side,
-        "limit_price": order.limit_price,
-        "quantity": order.quantity,
-        "remaining_quantity": order.quantity,
-        "status": OrderStatus.NEW,
-        "created_at": now,
-        "updated_at": now,
-    }
-
-    saved = save_order(order_data)
-    return to_response(saved)
+    try:
+        saved = submit_order(order)
+        return to_response(saved)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/{order_id}", response_model=OrderResponse)
@@ -60,7 +43,7 @@ def get_order(order_id: str):
 
     if record is None:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Order not found",
         )
 
@@ -73,22 +56,46 @@ def cancel_order(order_id: str):
 
     if record is None:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Order not found",
         )
 
     if record["status"] in ("FILLED", "CANCELLED"):
         raise HTTPException(
-            status_code=409,
+            status_code=status.HTTP_409_CONFLICT,
             detail="Order cannot be cancelled",
         )
+
+    # Remove the order from the matching engine if it is resting.
+    engine_order = matching_engine.get_order(
+        record["symbol"],
+        order_id,
+    )
+
+    if engine_order is not None:
+        cancelled = matching_engine.cancel_order(
+            record["symbol"],
+            order_id,
+        )
+
+        if not cancelled:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Unable to cancel order in matching engine",
+            )
 
     updated = update_order(
         order_id,
         {
-            "status": OrderStatus.CANCELLED,
+            "status": "CANCELLED",
             "remaining_quantity": 0,
         },
     )
+
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found",
+        )
 
     return to_response(updated)
