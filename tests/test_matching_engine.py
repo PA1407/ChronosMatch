@@ -262,3 +262,97 @@ def test_cancel_open_sell_order():
     assert sell.remaining_quantity == 5
     assert sell.filled_quantity == 0
     assert engine.get_order("TEST", "S_CANCEL") is None
+
+
+def test_cancelling_partial_order_preserves_trade_history():
+    engine = MatchingEngine()
+
+    buy = make_order("B_HISTORY", OrderSide.BUY, 100, 10)
+    sell = make_order("S_HISTORY", OrderSide.SELL, 100, 6)
+
+    engine.process_order(buy)
+    trades_before_cancel = engine.process_order(sell)
+
+    assert len(trades_before_cancel) == 1
+    assert trades_before_cancel[0].quantity == 6
+
+    result = engine.cancel_order("TEST", "B_HISTORY")
+
+    assert result is True
+    assert buy.order_status == OrderStatus.CANCELLED
+    assert buy.filled_quantity == 6
+    assert buy.remaining_quantity == 4
+
+    # Cancelling the remaining quantity must not erase executed trades.
+    all_trades = engine.get_trades("TEST")
+    assert len(all_trades) == 1
+    assert all_trades[0].trade_id == trades_before_cancel[0].trade_id
+    assert all_trades[0].quantity == 6
+
+
+def test_cancelling_one_order_preserves_other_orders():
+    engine = MatchingEngine()
+
+    first = make_order("B_FIRST", OrderSide.BUY, 100, 5)
+    second = make_order("B_SECOND", OrderSide.BUY, 99, 8)
+
+    engine.process_order(first)
+    engine.process_order(second)
+
+    assert engine.cancel_order("TEST", "B_FIRST") is True
+
+    book = engine.get_order_book("TEST")
+
+    assert book.get_best_buy() is second
+    assert book.get_order("B_FIRST") is None
+    assert book.get_order("B_SECOND") is second
+    assert second.remaining_quantity == 8
+    assert second.order_status == OrderStatus.OPEN
+
+
+def test_cancelling_same_order_twice():
+    engine = MatchingEngine()
+    buy = make_order("B_TWICE", OrderSide.BUY, 100, 5)
+
+    engine.process_order(buy)
+
+    assert engine.cancel_order("TEST", "B_TWICE") is True
+    assert buy.order_status == OrderStatus.CANCELLED
+
+    assert engine.cancel_order("TEST", "B_TWICE") is False
+    assert buy.order_status == OrderStatus.CANCELLED
+    assert buy.remaining_quantity == 5
+
+
+def test_one_order_matches_multiple_resting_orders():
+    engine = MatchingEngine()
+
+    first_buy = make_order("B1", OrderSide.BUY, 100, 4)
+    second_buy = make_order("B2", OrderSide.BUY, 98, 6)
+    incoming_sell = make_order("S1", OrderSide.SELL, 95, 10)
+
+    assert engine.process_order(first_buy) == []
+    assert engine.process_order(second_buy) == []
+
+    trades = engine.process_order(incoming_sell)
+
+    assert len(trades) == 2
+
+    assert trades[0].buy_order_id == "B1"
+    assert trades[0].quantity == 4
+    assert trades[0].price == Decimal("100")
+
+    assert trades[1].buy_order_id == "B2"
+    assert trades[1].quantity == 6
+    assert trades[1].price == Decimal("98")
+
+    assert incoming_sell.filled_quantity == 10
+    assert incoming_sell.remaining_quantity == 0
+    assert incoming_sell.order_status == OrderStatus.FILLED
+
+    assert first_buy.order_status == OrderStatus.FILLED
+    assert second_buy.order_status == OrderStatus.FILLED
+
+    assert engine.get_order("TEST", "B1") is None
+    assert engine.get_order("TEST", "B2") is None
+    assert engine.get_order("TEST", "S1") is None
