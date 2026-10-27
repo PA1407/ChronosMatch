@@ -52,6 +52,9 @@ def submit_order(request: OrderCreate) -> dict:
 
     # Match the incoming order.
     generated_trades = matching_engine.process_order(engine_order)
+    print("ENGINE ORDER:", engine_order.order_id, engine_order.order_status)
+    print("GENERATED TRADES:", len(generated_trades))
+    print("BOOK ORDER IDS:", list(book.orders_by_id.keys()))
 
     # Save the incoming order first so trade foreign keys are valid.
     record = {
