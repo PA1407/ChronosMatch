@@ -5,14 +5,16 @@ from app.engine.matching_engine import MatchingEngine
 from app.engine.models import Order, OrderSide, OrderStatus
 
 
-def make_order(order_id, side, price, quantity):
+
+def make_order(order_id, side, price, quantity, symbol="TEST"):
     return Order(
         order_id=order_id,
-        symbol="TEST",
+        symbol=symbol,
         side=side,
         price=Decimal(str(price)),
         quantity=quantity,
     )
+
 
 
 def test_partial_fill():
@@ -356,3 +358,26 @@ def test_one_order_matches_multiple_resting_orders():
     assert engine.get_order("TEST", "B1") is None
     assert engine.get_order("TEST", "B2") is None
     assert engine.get_order("TEST", "S1") is None
+
+
+
+def test_orders_with_different_symbols_do_not_match():
+    engine = MatchingEngine()
+
+    buy = make_order("B_SYMBOL", OrderSide.BUY, 100, 5, symbol="ABC")
+    sell = make_order("S_SYMBOL", OrderSide.SELL, 90, 5, symbol="XYZ")
+
+    assert engine.process_order(buy) == []
+    assert engine.process_order(sell) == []
+
+    assert buy.filled_quantity == 0
+    assert sell.filled_quantity == 0
+
+    assert buy.remaining_quantity == 5
+    assert sell.remaining_quantity == 5
+
+    assert buy.order_status == OrderStatus.OPEN
+    assert sell.order_status == OrderStatus.OPEN
+
+    assert engine.get_order("ABC", "B_SYMBOL") is buy
+    assert engine.get_order("XYZ", "S_SYMBOL") is sell
