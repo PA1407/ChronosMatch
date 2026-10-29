@@ -381,3 +381,23 @@ def test_orders_with_different_symbols_do_not_match():
 
     assert engine.get_order("ABC", "B_SYMBOL") is buy
     assert engine.get_order("XYZ", "S_SYMBOL") is sell
+
+
+def test_removing_order_clears_all_order_book_references():
+    engine = MatchingEngine()
+
+    buy = make_order("B_REMOVE", OrderSide.BUY, 100, 5)
+    engine.process_order(buy)
+
+    book = engine.get_order_book("TEST")
+
+    assert book.get_order("B_REMOVE") is buy
+    assert book.get_best_buy() is buy
+
+    assert book.remove_order("B_REMOVE") is True
+
+    assert book.get_order("B_REMOVE") is None
+    assert book.get_best_buy() is None
+    assert buy not in book.buy_orders
+
+    assert book.remove_order("B_REMOVE") is False
