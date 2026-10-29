@@ -7,6 +7,7 @@ from app.database.connection import get_connection
 
 
 def _now() -> str:
+    """Return the current UTC timestamp."""
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -14,8 +15,10 @@ def _value(value: Any) -> Any:
     """Convert enums and Decimal values to SQLite-friendly values."""
     if isinstance(value, Decimal):
         return str(value)
+
     if hasattr(value, "value"):
         return value.value
+
     return value
 
 
@@ -66,6 +69,19 @@ def get_order(order_id: str) -> dict | None:
         ).fetchone()
 
     return dict(row) if row else None
+
+
+def list_orders() -> list[dict]:
+    """Retrieve all orders in creation order."""
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT * FROM orders
+            ORDER BY created_at ASC, order_id ASC
+            """
+        ).fetchall()
+
+    return [dict(row) for row in rows]
 
 
 def update_order(order_id: str, updates: dict) -> dict | None:
@@ -151,7 +167,7 @@ def get_trade(trade_id: str) -> dict | None:
 
 
 def list_trades(limit: int = 100) -> list[dict]:
-    """Retrieve the most recent trades."""
+    """Retrieve the most recent trades, limited by count."""
     if not 1 <= limit <= 1000:
         raise ValueError("limit must be between 1 and 1000")
 
@@ -167,7 +183,22 @@ def list_trades(limit: int = 100) -> list[dict]:
 
     return [dict(row) for row in rows]
 
-def get_order_stats():
+
+def list_all_trades() -> list[dict]:
+    """Retrieve all persisted trades in execution order."""
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT * FROM trades
+            ORDER BY executed_at ASC, trade_id ASC
+            """
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def get_order_stats() -> dict:
+    """Return aggregate order and trade statistics."""
     with get_connection() as connection:
         total_orders = connection.execute(
             "SELECT COUNT(*) FROM orders"
