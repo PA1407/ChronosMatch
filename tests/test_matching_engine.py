@@ -96,6 +96,7 @@ def test_best_buy_uses_highest_price_first():
     assert book.buy_orders[2].order_id == "B1"
 
 
+
 def test_same_price_uses_earlier_order_first():
     engine = MatchingEngine()
 
@@ -109,6 +110,20 @@ def test_same_price_uses_earlier_order_first():
 
     assert book.get_best_buy().order_id == "B1"
     assert book.buy_orders[1].order_id == "B2"
+
+    sell = make_order("S1", OrderSide.SELL, 100, 5)
+    trades = engine.process_order(sell)
+
+    assert len(trades) == 1
+    assert trades[0].buy_order_id == "B1"
+    assert trades[0].quantity == 5
+    assert trades[0].price == Decimal("100")
+
+    assert engine.get_order("TEST", "B1") is None
+    assert engine.get_order("TEST", "B2") is second
+    assert second.remaining_quantity == 5
+    assert second.order_status == OrderStatus.OPEN
+
 
 
 def test_best_sell_uses_lowest_price_first():
@@ -129,6 +144,7 @@ def test_best_sell_uses_lowest_price_first():
     assert book.sell_orders[2].order_id == "S1"
 
 
+
 def test_same_sell_price_uses_earlier_order_first():
     engine = MatchingEngine()
 
@@ -142,6 +158,19 @@ def test_same_sell_price_uses_earlier_order_first():
 
     assert book.get_best_sell().order_id == "S1"
     assert book.sell_orders[1].order_id == "S2"
+
+    buy = make_order("B1", OrderSide.BUY, 105, 5)
+    trades = engine.process_order(buy)
+
+    assert len(trades) == 1
+    assert trades[0].sell_order_id == "S1"
+    assert trades[0].quantity == 5
+    assert trades[0].price == Decimal("105")
+
+    assert engine.get_order("TEST", "S1") is None
+    assert engine.get_order("TEST", "S2") is second
+    assert second.remaining_quantity == 5
+    assert second.order_status == OrderStatus.OPEN
 
 
 import pytest
