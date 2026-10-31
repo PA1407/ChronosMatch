@@ -2,6 +2,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from app.database.init_db import initialize_database
 
 from app.api.success import router as success_router
 from app.api.orders import router as orders_router
@@ -13,7 +14,7 @@ from app.services.order_service import matching_engine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Restore the shared matching engine before serving requests."""
+    initialize_database()
     matching_engine.restore_from_database()
     yield
 
