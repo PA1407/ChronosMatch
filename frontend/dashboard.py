@@ -1,7 +1,9 @@
 
 import streamlit as st
 import pandas as pd
-import requests
+
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from api_client import (
     check_api_health,
@@ -14,56 +16,113 @@ from api_client import (
     get_stats,
 )
 
+
 # --------------------------------------------------
 # PAGE CONFIGURATION
 # --------------------------------------------------
 
 st.set_page_config(
-    page_title="ChronosMatch Trading Dashboard",
+    page_title="ChronosMatch Dashboard",
     page_icon="📈",
     layout="wide",
 )
 
-st.title("📈 ChronosMatch")
-st.caption("Zero-Copy High-Frequency Trading Engine | Trading Dashboard")
+IST = ZoneInfo("Asia/Kolkata")
+
 
 # --------------------------------------------------
 # HELPER FUNCTIONS
 # --------------------------------------------------
 
-def show_api_error(error):
-    """Display a useful API error message."""
-    if isinstance(error, requests.HTTPError):
-        response = error.response
-        if response is not None:
-            try:
-                detail = response.json().get("detail", response.text)
-            except ValueError:
-                detail = response.text
-
-            st.error(f"API Error ({response.status_code}): {detail}")
-            return
-
-    st.error(f"Connection error: {error}")
+def valid_symbol(value):
+    """Validate trading symbols using backend rules."""
+    return bool(
+        value
+        and len(value) <= 20
+        and value.isalnum()
+    )
 
 
-def dataframe_or_empty(records, message):
-    """Display records as a table or show an empty-state message."""
-    if records:
-        st.dataframe(
-            pd.DataFrame(records),
-            use_container_width=True,
-            hide_index=True,
+def format_timestamp(value):
+    """Convert UTC timestamps into Indian Standard Time."""
+    if not value:
+        return "N/A"
+
+    try:
+        if isinstance(value, datetime):
+            timestamp = value
+        else:
+            timestamp = datetime.fromisoformat(
+                str(value).replace("Z", "+00:00")
+            )
+
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+
+        return timestamp.astimezone(IST).strftime(
+            "%d-%m-%Y %I:%M:%S %p IST"
+        )
+
+    except (ValueError, TypeError):
+        return str(value)
+
+
+def display_error(error):
+    """Display API errors in a readable format."""
+    response = getattr(error, "response", None)
+
+    if response is not None:
+        try:
+            details = response.json()
+            message = details.get("detail", str(details))
+        except ValueError:
+            message = response.text
+
+        st.error(
+            f"API Error ({response.status_code}): {message}"
         )
     else:
-        st.info(message)
+        st.error(f"Error: {error}")
+
+
+def display_order_table(orders):
+    """Display orders with timestamps converted to IST."""
+    if not orders:
+        st.info("No active orders.")
+        return
+
+    formatted_orders = []
+
+    for order in orders:
+        formatted_orders.append({
+            "Order ID": order.get("order_id"),
+            "Symbol": order.get("symbol"),
+            "Side": order.get("side"),
+            "Price": order.get("price", order.get("limit_price")),
+            "Quantity": order.get("quantity"),
+            "Filled Quantity": order.get("filled_quantity"),
+            "Remaining Quantity": order.get("remaining_quantity"),
+            "Status": order.get("status", order.get("order_status")),
+            "Created At (IST)": format_timestamp(
+                order.get("created_at")
+            ),
+            "Updated At (IST)": format_timestamp(
+                order.get("updated_at")
+            ),
+        })
+
+    st.dataframe(
+        pd.DataFrame(formatted_orders),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 # --------------------------------------------------
 # SIDEBAR
 # --------------------------------------------------
 
-st.sidebar.header("Dashboard Controls")
+st.sidebar.title("Dashboard Controls")
 
 symbol = st.sidebar.text_input(
     "Trading Symbol",
@@ -71,33 +130,55 @@ symbol = st.sidebar.text_input(
     max_chars=20,
 ).strip().upper()
 
-refresh = st.sidebar.button(
+if st.sidebar.button(
     "🔄 Refresh Dashboard",
     use_container_width=True,
-)
+):
+    st.rerun()
 
 st.sidebar.divider()
+st.sidebar.caption("ChronosMatch Trading System")
+
 
 # --------------------------------------------------
-# API CONNECTION STATUS
+# HEADER
+# --------------------------------------------------
+
+st.title("📈 ChronosMatch")
+
+st.caption(
+    "Zero-Copy High-Frequency Trading Engine | Trading Dashboard"
+)
+
+st.caption(
+    "All dashboard timestamps are displayed in Indian Standard Time (IST)."
+)
+
+
+# --------------------------------------------------
+# BACKEND HEALTH CHECK
 # --------------------------------------------------
 
 api_online = check_api_health()
 
 if api_online:
-    st.success("Backend API is connected")
+    st.success("🟢 Backend API is connected")
 else:
-    st.error(
-        "Backend API is offline. Start the FastAPI server "
-        "before using dashboard features."
+    st.error("🔴 FastAPI: Offline")
+    st.warning(
+        "Start the FastAPI backend before using dashboard features."
     )
 
-if not symbol or not symbol.isalnum():
-    st.warning("Enter a valid symbol containing letters and numbers.")
+
+if not valid_symbol(symbol):
+    st.warning(
+        "Enter a valid symbol containing only letters and numbers."
+    )
     st.stop()
 
+
 # --------------------------------------------------
-# STATISTICS
+# MARKET OVERVIEW
 # --------------------------------------------------
 
 st.header("Market Overview")
@@ -108,83 +189,123 @@ if api_online:
 
         col1, col2, col3, col4, col5 = st.columns(5)
 
-        col1.metric("Total Orders", stats.get("total_orders", 0))
-        col2.metric("Active Orders", stats.get("active_orders", 0))
-        col3.metric("Filled Orders", stats.get("filled_orders", 0))
-        col4.metric("Cancelled Orders", stats.get("cancelled_orders", 0))
-        col5.metric("Total Trades", stats.get("total_trades", 0))
+        col1.metric(
+            "Total Orders",
+            stats.get("total_orders", 0),
+        )
 
-    except requests.RequestException as error:
-        show_api_error(error)
+        col2.metric(
+            "Active Orders",
+            stats.get("active_orders", 0),
+        )
+
+        col3.metric(
+            "Filled Orders",
+            stats.get("filled_orders", 0),
+        )
+
+        col4.metric(
+            "Cancelled Orders",
+            stats.get("cancelled_orders", 0),
+        )
+
+        col5.metric(
+            "Total Trades",
+            stats.get("total_trades", 0),
+        )
+
+    except Exception as error:
+        display_error(error)
+
 
 st.divider()
 
+
 # --------------------------------------------------
-# MAIN DASHBOARD TABS
+# DASHBOARD TABS
 # --------------------------------------------------
 
 tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Order Book",
     "📝 Place Order",
     "🔍 Manage Orders",
-    "💹 Trade History",
+    "📈 Trade History",
 ])
 
-# --------------------------------------------------
+
+# ==================================================
 # TAB 1: ORDER BOOK
-# --------------------------------------------------
+# ==================================================
 
 with tab1:
-    st.subheader(f"Order Book — {symbol}")
+
+    st.header(f"Order Book — {symbol}")
 
     if api_online:
         try:
-            book = get_orderbook(symbol)
             summary = get_orderbook_summary(symbol)
 
-            c1, c2, c3, c4 = st.columns(4)
+            col1, col2, col3, col4 = st.columns(4)
 
-            c1.metric("Buy Orders", summary.get("buy_order_count", 0))
-            c2.metric("Sell Orders", summary.get("sell_order_count", 0))
-            c3.metric(
+            # These keys match app/api/orderbook.py.
+            col1.metric(
+                "Buy Orders",
+                summary.get("buy_order_count", 0),
+            )
+
+            col2.metric(
+                "Sell Orders",
+                summary.get("sell_order_count", 0),
+            )
+
+            col3.metric(
                 "Buy Remaining Quantity",
                 summary.get("buy_remaining_quantity", 0),
             )
-            c4.metric(
+
+            col4.metric(
                 "Sell Remaining Quantity",
                 summary.get("sell_remaining_quantity", 0),
             )
 
+            orderbook = get_orderbook(symbol)
+
+            buy_orders = orderbook.get("buy_orders", [])
+            sell_orders = orderbook.get("sell_orders", [])
+
             buy_col, sell_col = st.columns(2)
 
             with buy_col:
-                st.markdown("### 🟢 Buy Orders")
-                dataframe_or_empty(
-                    book.get("buy_orders", []),
-                    "No active buy orders.",
-                )
+                st.subheader("🟢 Buy Orders")
+                display_order_table(buy_orders)
 
             with sell_col:
-                st.markdown("### 🔴 Sell Orders")
-                dataframe_or_empty(
-                    book.get("sell_orders", []),
-                    "No active sell orders.",
-                )
+                st.subheader("🔴 Sell Orders")
+                display_order_table(sell_orders)
 
-        except requests.RequestException as error:
-            show_api_error(error)
+        except Exception as error:
+            display_error(error)
 
-# --------------------------------------------------
+    else:
+        st.info(
+            "Order book will be available when the backend is online."
+        )
+
+
+# ==================================================
 # TAB 2: PLACE ORDER
-# --------------------------------------------------
+# ==================================================
 
 with tab2:
-    st.subheader("Submit a New Order")
 
-    with st.form("order_form"):
+    st.header("Place New Order")
+
+    with st.form("place_order_form"):
+
         order_symbol = st.text_input(
-            "Symbol",
+            "Trading Symbol",
             value=symbol,
+            max_chars=20,
         ).strip().upper()
 
         side = st.selectbox(
@@ -192,12 +313,11 @@ with tab2:
             ["BUY", "SELL"],
         )
 
-        price = st.number_input(
+        limit_price = st.number_input(
             "Limit Price",
             min_value=0.01,
-            value=100.00,
+            value=100.0,
             step=1.0,
-            format="%.2f",
         )
 
         quantity = st.number_input(
@@ -213,94 +333,201 @@ with tab2:
         )
 
     if submitted:
-        if not order_symbol or not order_symbol.isalnum():
-            st.warning("Enter a valid trading symbol.")
+
+        if not valid_symbol(order_symbol):
+            st.error(
+                "Enter a valid symbol containing only letters and numbers."
+            )
+
         elif not api_online:
-            st.error("Backend is offline. Cannot submit order.")
+            st.error("Backend API is offline.")
+
         else:
             try:
                 result = submit_order(
                     order_symbol,
                     side,
-                    price,
+                    limit_price,
                     int(quantity),
                 )
 
-                st.success("Order submitted successfully!")
-                st.json(result)
+                st.session_state["last_order_result"] = result
 
-            except requests.RequestException as error:
-                show_api_error(error)
+                st.success(
+                    "Order submitted successfully!"
+                )
 
-# --------------------------------------------------
-# TAB 3: ORDER LOOKUP AND CANCELLATION
-# --------------------------------------------------
+            except Exception as error:
+                display_error(error)
+
+    if st.session_state.get("last_order_result"):
+        st.subheader("Submitted Order")
+        st.json(st.session_state["last_order_result"])
+
+
+# ==================================================
+# TAB 3: MANAGE ORDERS
+# ==================================================
 
 with tab3:
-    st.subheader("Manage Existing Orders")
 
-    order_id = st.text_input("Enter Order ID")
+    st.header("Manage Existing Orders")
 
-    lookup_col, cancel_col = st.columns(2)
+    order_id = st.text_input(
+        "Enter Order ID",
+        placeholder="Enter your order UUID",
+    ).strip()
 
-    with lookup_col:
-        if st.button("Find Order", use_container_width=True):
-            if not order_id.strip():
-                st.warning("Please enter an order ID.")
-            elif not api_online:
-                st.error("Backend is offline.")
-            else:
-                try:
-                    result = get_order(order_id.strip())
-                    st.success("Order found.")
-                    st.json(result)
+    find_col, cancel_col = st.columns(2)
 
-                except requests.RequestException as error:
-                    show_api_error(error)
+    with find_col:
+        find_clicked = st.button(
+            "Find Order",
+            use_container_width=True,
+        )
 
     with cancel_col:
-        if st.button("Cancel Order", use_container_width=True):
-            if not order_id.strip():
-                st.warning("Please enter an order ID.")
-            elif not api_online:
-                st.error("Backend is offline.")
-            else:
-                try:
-                    result = cancel_order(order_id.strip())
-                    st.success("Order cancellation response received.")
-                    st.json(result)
+        cancel_clicked = st.button(
+            "Cancel Order",
+            use_container_width=True,
+        )
 
-                except requests.RequestException as error:
-                    show_api_error(error)
+    if find_clicked:
 
-# --------------------------------------------------
+        if not order_id:
+            st.warning("Please enter an Order ID.")
+
+        elif not api_online:
+            st.error("Backend API is offline.")
+
+        else:
+            try:
+                order = get_order(order_id)
+
+                st.session_state["found_order"] = order
+
+                st.success("Order found.")
+
+            except Exception as error:
+                st.session_state.pop("found_order", None)
+                display_error(error)
+
+    if st.session_state.get("found_order"):
+
+        order = st.session_state["found_order"]
+
+        st.subheader("Order Details")
+
+        order_details = {
+            "Order ID": order.get("order_id"),
+            "Symbol": order.get("symbol"),
+            "Side": order.get("side"),
+            "Limit Price": order.get("limit_price"),
+            "Quantity": order.get("quantity"),
+            "Remaining Quantity": order.get("remaining_quantity"),
+            "Status": order.get("status"),
+        }
+
+        st.json(order_details)
+
+    if cancel_clicked:
+
+        if not order_id:
+            st.warning("Please enter an Order ID.")
+
+        elif not api_online:
+            st.error("Backend API is offline.")
+
+        else:
+            try:
+                result = cancel_order(order_id)
+
+                st.session_state["cancel_result"] = result
+                st.session_state.pop("found_order", None)
+
+                st.success("Order cancelled successfully!")
+
+            except Exception as error:
+                display_error(error)
+
+    if st.session_state.get("cancel_result"):
+
+        st.subheader("Cancellation Result")
+
+        st.json(st.session_state["cancel_result"])
+
+        st.session_state.pop("cancel_result", None)
+
+
+# ==================================================
 # TAB 4: TRADE HISTORY
-# --------------------------------------------------
+# ==================================================
 
 with tab4:
-    st.subheader("Recent Executed Trades")
 
-    trade_limit = st.slider(
-        "Number of trades",
+    st.header("Trade History")
+
+    trade_limit = st.number_input(
+        "Number of Recent Trades",
         min_value=1,
-        max_value=100,
-        value=20,
+        max_value=1000,
+        value=100,
+        step=10,
     )
 
-    if api_online:
-        try:
-            trades = get_trades(
-                symbol=symbol,
-                limit=trade_limit,
+    if st.button(
+        "Load Trade History",
+        use_container_width=True,
+    ):
+
+        if not api_online:
+            st.error("Backend API is offline.")
+
+        else:
+            try:
+                trades = get_trades(
+                    symbol=symbol,
+                    limit=int(trade_limit),
+                )
+
+                st.session_state["trade_history"] = trades
+
+            except Exception as error:
+                display_error(error)
+
+    if "trade_history" in st.session_state:
+
+        trades = st.session_state["trade_history"]
+
+        if trades:
+
+            formatted_trades = []
+
+            for trade in trades:
+                formatted_trades.append({
+                    "Trade ID": trade.get("trade_id"),
+                    "Symbol": trade.get("symbol"),
+                    "Buy Order ID": trade.get("buy_order_id"),
+                    "Sell Order ID": trade.get("sell_order_id"),
+                    "Execution Price": trade.get(
+                        "execution_price",
+                        trade.get("price"),
+                    ),
+                    "Quantity": trade.get("quantity"),
+                    "Executed At (IST)": format_timestamp(
+                        trade.get("executed_at")
+                    ),
+                })
+
+            st.dataframe(
+                pd.DataFrame(formatted_trades),
+                use_container_width=True,
+                hide_index=True,
             )
 
-            dataframe_or_empty(
-                trades,
-                "No trades found for this symbol.",
-            )
+        else:
+            st.info("No trades found for this symbol.")
 
-        except requests.RequestException as error:
-            show_api_error(error)
 
 # --------------------------------------------------
 # FOOTER
