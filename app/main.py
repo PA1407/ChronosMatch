@@ -2,18 +2,20 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from app.database.init_db import initialize_database
 
 from app.api.success import router as success_router
 from app.api.orders import router as orders_router
 from app.api.trades import router as trades_router
 from app.api.stats import router as stats_router
 from app.api.orderbook import router as orderbook_router
+
+from app.database.init_db import initialize_database
 from app.services.order_service import matching_engine
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Initialize database and restore matching engine before serving requests."""
     initialize_database()
     matching_engine.restore_from_database()
     yield
