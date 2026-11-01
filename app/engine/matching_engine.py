@@ -1,6 +1,9 @@
 
+from datetime import datetime
+from decimal import Decimal
 from uuid import uuid4
 
+from app.database.repository import list_all_trades, list_orders
 from app.engine.models import (
     Order,
     OrderSide,
@@ -28,6 +31,62 @@ class MatchingEngine:
 
         return self.order_books[symbol]
 
+    def restore_from_database(self) -> None:
+        """Restore open orders and trade history without rematching trades."""
+        self.order_books.clear()
+        self.trades.clear()
+
+        # Restore outstanding orders in their original creation order.
+        for record in list_orders():
+            status = record["status"]
+
+            if status not in {"NEW", "OPEN", "PARTIALLY_FILLED"}:
+                continue
+
+            quantity = int(record["quantity"])
+            remaining = int(record["remaining_quantity"])
+
+            if remaining <= 0:
+                continue
+
+            created_at = datetime.fromisoformat(record["created_at"])
+            updated_at = datetime.fromisoformat(record["updated_at"])
+
+            order = Order(
+                order_id=record["order_id"],
+                symbol=record["symbol"],
+                side=OrderSide(record["side"]),
+                price=Decimal(str(record["limit_price"])),
+                quantity=quantity,
+                filled_quantity=quantity - remaining,
+                remaining_quantity=remaining,
+                order_status=(
+                    OrderStatus.PARTIALLY_FILLED
+                    if remaining < quantity
+                    else OrderStatus.OPEN
+                ),
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+
+            self.get_order_book(order.symbol).add_order(order)
+
+        # Restore existing trades; do not run the matching algorithm.
+        for record in list_all_trades():
+            self.trades.append(
+                Trade(
+                    trade_id=record["trade_id"],
+                    buy_order_id=record["buy_order_id"],
+                    sell_order_id=record["sell_order_id"],
+                    symbol=record["symbol"],
+                    price=Decimal(str(record["execution_price"])),
+                    quantity=int(record["quantity"]),
+                    executed_at=datetime.fromisoformat(
+                        record["executed_at"]
+                    ),
+                )
+            )
+
     def process_order(self, order: Order) -> list[Trade]:
         """Match an incoming order and return the trades it generates."""
         if order.order_status != OrderStatus.OPEN:
@@ -53,14 +112,18 @@ class MatchingEngine:
         while order.remaining_quantity > 0:
             if order.side == OrderSide.BUY:
                 resting_order = book.get_best_sell()
+
                 if resting_order is None:
                     break
+
                 if order.price < resting_order.price:
                     break
             else:
                 resting_order = book.get_best_buy()
+
                 if resting_order is None:
                     break
+
                 if order.price > resting_order.price:
                     break
 
@@ -69,7 +132,7 @@ class MatchingEngine:
                 resting_order.remaining_quantity,
             )
 
-            # The resting order's price determines the execution price.
+            # The resting order determines the execution price.
             trade = Trade(
                 trade_id=str(uuid4()),
                 buy_order_id=(
@@ -111,7 +174,7 @@ class MatchingEngine:
             generated_trades.append(trade)
             self.trades.append(trade)
 
-        # Keep any unfilled quantity in the order book.
+        # Keep unfilled quantity in the book.
         if order.remaining_quantity > 0:
             if order.filled_quantity > 0:
                 order.order_status = OrderStatus.PARTIALLY_FILLED
@@ -125,11 +188,12 @@ class MatchingEngine:
     def get_order(self, symbol: str, order_id: str) -> Order | None:
         """Find an order currently resting in the order book."""
         book = self.order_books.get(symbol)
+
         if book is None:
             return None
+
         return book.get_order(order_id)
-    
-    
+
     def cancel_order(self, symbol: str, order_id: str) -> bool:
         """Cancel an order that is still resting in the order book."""
         book = self.order_books.get(symbol)
@@ -147,7 +211,6 @@ class MatchingEngine:
         order.updated_at = utc_now()
 
         return True
-
 
     def get_trades(self, symbol: str | None = None) -> list[Trade]:
         """Return all trades, optionally filtered by symbol."""
