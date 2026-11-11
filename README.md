@@ -1,122 +1,210 @@
-# ChronosMatch — Zero-Copy High-Frequency Trading Engine
+# ChronosMatch – Exchange Matching Engine and Trading Dashboard
 
 ## 1. Project Overview
 
-ChronosMatch is a Python-based exchange simulation project designed to explore order-book management, matching algorithms, and performance considerations relevant to high-frequency trading systems.
+ChronosMatch is a Python-based exchange simulation system designed to demonstrate how trading platforms manage buy and sell orders, maintain an order book, execute trades, and preserve transaction data.
 
-The project focuses on implementing a matching engine that processes buy and sell orders, maintains price-time priority, handles partial and complete order fills, and records executed trades.
+The application uses a matching engine based on price-time priority. It provides REST APIs through FastAPI, persistent storage using SQLite, and a Streamlit dashboard for interacting with the trading system.
 
-**Project status:** Core engine development and automated testing are in progress.
+The project focuses on modular architecture, matching correctness, order lifecycle management, database persistence, API integration, and automated testing.
 
-## 2. Current Features
+**Project Status:** Core matching engine, REST API integration, database persistence, recovery functionality, and Streamlit dashboard have been implemented and tested.
 
-- **Order and trade models:** Structured representations of orders, trade records, order sides, and order statuses.
-- **Order book:** Separate buy and sell order collections with price-time priority.
-- **Matching engine:** Matches compatible buy and sell orders based on price and available quantity.
-- **Partial fills:** Updates filled and remaining quantities when an order is only partially executed.
-- **Trade records:** Records execution price, quantity, and associated buy and sell order IDs.
-- **Order cancellation:** Supports cancellation of orders that remain in the order book.
-- **Automated testing:** Uses pytest to validate matching behavior, order priority, invalid inputs, duplicate order IDs, and cancellation scenarios.
+## 2. Key Features
 
-## 3. Matching Rules
+- **Order and Trade Management:** Structured models for orders, trade records, order sides, and order statuses.
+- **Order Book:** Maintains separate buy and sell orders using price-time priority.
+- **Matching Engine:** Automatically matches compatible buy and sell orders.
+- **Partial and Complete Fills:** Updates filled and remaining quantities during trade execution.
+- **Order Cancellation:** Supports cancellation of active orders while preserving previously executed trades.
+- **Trade Records:** Stores execution price, quantity, timestamp, and associated buy and sell order IDs.
+- **REST API Integration:** FastAPI endpoints allow users to submit, retrieve, and manage orders and trades.
+- **Database Persistence:** SQLite stores order and trade information.
+- **Recovery Mechanism:** Restores the matching engine's state from persisted data when the application restarts.
+- **Interactive Dashboard:** Streamlit provides a user interface for placing orders, viewing the order book, managing orders, and viewing trade history.
+- **Automated Testing:** Pytest validates matching logic, API behavior, persistence, recovery, and other system functionality.
 
-The current implementation follows these rules:
+## 3. Matching Engine Rules
 
-- Buy orders are prioritized by highest price first.
-- Sell orders are prioritized by lowest price first.
-- Earlier orders receive priority when prices are equal.
-- Orders match when their prices are compatible.
-- The resting order's price is used as the execution price.
-- Filled and remaining quantities are updated after execution.
-- Unfilled quantities remain in the order book.
-- Fully filled orders are removed from the order book.
-- Resting orders can be cancelled through the matching engine.
+The matching engine follows price-time priority:
+
+1. Buy orders are prioritized by highest price first.
+2. Sell orders are prioritized by lowest price first.
+3. When prices are equal, the earlier order receives priority.
+4. A trade executes when the best buy price is equal to or higher than the best sell price.
+5. The resting order's price is used as the execution price.
+6. Filled and remaining quantities are updated after every execution.
+7. Fully filled orders are removed from the active order book.
+8. Partially filled orders remain active with their remaining quantity.
+9. Active resting orders can be cancelled.
+10. Previously executed trade records are preserved when an order is cancelled.
 
 ## 4. Technology Stack
 
-- **Language:** Python
-- **Testing:** pytest
-- **Version control:** Git and GitHub
-- **Development environment:** Visual Studio Code
+| Component | Technology |
+|---|---|
+| Programming Language | Python |
+| Backend Framework | FastAPI |
+| ASGI Server | Uvicorn |
+| Database | SQLite |
+| Frontend | Streamlit |
+| Data Handling | Pandas |
+| API Communication | REST API, Requests |
+| Testing | Pytest |
+| Version Control | Git and GitHub |
 
-FastAPI integration, database persistence, dashboard development, and performance optimization are planned or under evaluation and should not be considered complete until implemented and tested.
+## 5. System Architecture
 
-## 5. Project Structure
+ChronosMatch follows a modular architecture with the following major components:
+
+- **Frontend Layer:** Streamlit dashboard provides the user interface.
+- **API Layer:** FastAPI exposes endpoints for order submission, order management, order-book retrieval, and trade history.
+- **Matching Engine Layer:** Processes incoming orders and applies price-time priority.
+- **Order Book Layer:** Maintains active buy and sell orders.
+- **Persistence Layer:** SQLite stores order and trade records.
+- **Recovery Mechanism:** Reloads persisted state during application startup.
+
+### Order Processing Flow
+
+1. A user submits an order through the Streamlit dashboard.
+2. The frontend sends the request to the FastAPI backend.
+3. The API validates and processes the order.
+4. The matching engine checks the order against the existing order book.
+5. Compatible orders are matched and trade records are generated.
+6. Updated order and trade information is persisted in SQLite.
+7. The dashboard retrieves and displays the latest order-book and trade information.
+
+## 6. Project Structure
 
 ```text
 ChronosMatch/
+│
 ├── app/
-│   └── engine/
-│       ├── models.py
-│       ├── order_book.py
-│       └── matching_engine.py
+│   ├── api/
+│   ├── engine/
+│   │   ├── models.py
+│   │   ├── order_book.py
+│   │   └── matching_engine.py
+│   ├── database/
+│   └── main.py
+│
+├── frontend/
+│   ├── api_client.py
+│   ├── dashboard.py
+│   └── requirements.txt
+│
 ├── docs/
 │   ├── architecture.md
 │   ├── requirements.md
 │   └── team-responsibilities.md
+│
 ├── tests/
-│   └── test_matching_engine.py
+│
+├── ChronosMatch_Modules_Guide.pdf
 ├── .gitignore
 ├── README.md
 └── requirements.txt
 ```
 
-## 6. Setup and Installation
+*The structure above highlights the main project components; individual modules and test files may contain additional files.*
 
-Clone the repository:
+## 7. Installation and Setup
+
+### Step 1: Clone the Repository
 
 ```bash
 git clone https://github.com/PA1407/ChronosMatch.git
 cd ChronosMatch
 ```
 
-Create a virtual environment:
+### Step 2: Create a Virtual Environment
 
 ```bash
 python -m venv .venv
 ```
 
-Activate it on Windows PowerShell:
+### Step 3: Activate the Virtual Environment
+
+For Windows PowerShell:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-Install the project dependencies:
+### Step 4: Install Backend Dependencies
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-## 7. Running the Tests
+### Step 5: Install Frontend Dependencies
 
-Run the complete test suite from the repository root:
+```bash
+python -m pip install -r frontend/requirements.txt
+```
+
+## 8. Running the Application
+
+The backend and frontend should run in separate terminals.
+
+### Start the Backend
+
+From the project root, activate the virtual environment and run:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Backend URL:
+
+`http://127.0.0.1:8000`
+
+Interactive API documentation:
+
+`http://127.0.0.1:8000/docs`
+
+### Start the Frontend
+
+Open another terminal, navigate to the project root, activate the virtual environment, and run:
+
+```bash
+streamlit run frontend/dashboard.py
+```
+
+The dashboard is generally available at:
+
+`http://localhost:8501`
+
+## 9. Running Automated Tests
+
+Run the complete test suite from the project root:
 
 ```bash
 python -m pytest -v
 ```
 
-The latest reported test run during development completed with **16 passing tests**. Run the command above to confirm the current result after pulling the latest changes.
+**Latest verified result:** 45 tests passed successfully.
 
-## 8. Current Limitations
+The test suite covers matching behavior, order-book priority, order validation, partial fills, cancellation, API functionality, persistence, and recovery scenarios.
 
-- The matching engine has initial automated test coverage, but additional edge cases and regression tests are needed.
-- The current order book prioritizes correctness and simplicity rather than optimized high-frequency performance.
-- API integration and persistent order and trade storage remain future development tasks.
-- Zero-copy behavior and performance improvements require implementation, profiling, and benchmark evidence before they can be claimed.
+Run the test command again after making changes to verify that existing functionality remains intact.
 
-## 9. Planned Development
+## 10. Current Limitations and Future Improvements
 
-1. Expand order lifecycle and matching-engine test coverage.
-2. Review matching correctness and error handling.
-3. Integrate the engine with a REST API.
-4. Add persistent storage for orders and trades.
-5. Develop performance benchmarks and profile bottlenecks.
-6. Evaluate optimization opportunities.
-7. Complete documentation and prepare the final demonstration.
+Although the core application is implemented, further improvements can include:
 
-## 10. Project Objective
+- Expanding edge-case and regression test coverage.
+- Improving API error handling and validation.
+- Enhancing dashboard usability and visualization.
+- Adding concurrent request handling and more advanced order types.
+- Profiling matching-engine performance under larger workloads.
+- Evaluating data structures and optimization techniques for improved throughput.
+- Adding deployment configuration and production-grade monitoring.
 
-The objective is to develop a modular and testable exchange simulation while learning about matching-engine design, order-book data structures, software testing, and performance optimization.
+Zero-copy behavior and high-frequency performance improvements should only be claimed after implementation, profiling, and benchmark validation.
 
-This project is for simulation and educational purposes; it is not connected to a real trading exchange.
+## 11. Project Objective
+
+The objective of ChronosMatch is to build a modular, testable exchange simulation that demonstrates order-book management, matching algorithms, REST API integration, database persistence, recovery mechanisms, and frontend-backend communication.
+
+This project is intended for educational and simulation purposes. It is not connected to a real trading exchange and is not designed for actual financial transactions.
