@@ -21,13 +21,15 @@ from api_client import (
 # PAGE CONFIGURATION
 # --------------------------------------------------
 
+
 st.set_page_config(
-    page_title="ChronosMatch Dashboard",
+    page_title="ChronosMatch | Trading Dashboard",
     page_icon="📈",
     layout="wide",
 )
 
 IST = ZoneInfo("Asia/Kolkata")
+
 
 
 # --------------------------------------------------
@@ -118,6 +120,26 @@ def display_order_table(orders):
     )
 
 
+def display_order_details(order):
+    """Display order details in a clean table instead of raw JSON."""
+
+    details = {
+        "Order ID": order.get("order_id"),
+        "Symbol": order.get("symbol"),
+        "Side": order.get("side"),
+        "Price": order.get("price", order.get("limit_price")),
+        "Quantity": order.get("quantity"),
+        "Filled Quantity": order.get("filled_quantity"),
+        "Remaining Quantity": order.get("remaining_quantity"),
+        "Status": order.get("status", order.get("order_status")),
+    }
+
+    st.dataframe(
+        pd.DataFrame([details]),
+        use_container_width=True,
+        hide_index=True,
+    )
+
 # --------------------------------------------------
 # SIDEBAR
 # --------------------------------------------------
@@ -144,15 +166,21 @@ st.sidebar.caption("ChronosMatch Trading System")
 # HEADER
 # --------------------------------------------------
 
+
+# --------------------------------------------------
+# HEADER
+# --------------------------------------------------
+
 st.title("📈 ChronosMatch")
 
 st.caption(
-    "Zero-Copy High-Frequency Trading Engine | Trading Dashboard"
+    "Real-Time Order Management and Trading Dashboard"
 )
 
 st.caption(
-    "All dashboard timestamps are displayed in Indian Standard Time (IST)."
+    "All timestamps are displayed in Indian Standard Time (IST)."
 )
+
 
 
 # --------------------------------------------------
@@ -231,6 +259,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "🔍 Manage Orders",
     "📈 Trade History",
 ])
+
 
 
 # ==================================================
@@ -361,8 +390,10 @@ with tab2:
                 display_error(error)
 
     if st.session_state.get("last_order_result"):
-        st.subheader("Submitted Order")
-        st.json(st.session_state["last_order_result"])
+       st.subheader("Submitted Order")
+       display_order_details(
+        st.session_state["last_order_result"]
+    )
 
 
 # ==================================================
@@ -428,7 +459,7 @@ with tab3:
             "Status": order.get("status"),
         }
 
-        st.json(order_details)
+        display_order_details(order)
 
     if cancel_clicked:
 
@@ -442,7 +473,6 @@ with tab3:
             try:
                 result = cancel_order(order_id)
 
-                st.session_state["cancel_result"] = result
                 st.session_state.pop("found_order", None)
 
                 st.success("Order cancelled successfully!")
@@ -450,13 +480,6 @@ with tab3:
             except Exception as error:
                 display_error(error)
 
-    if st.session_state.get("cancel_result"):
-
-        st.subheader("Cancellation Result")
-
-        st.json(st.session_state["cancel_result"])
-
-        st.session_state.pop("cancel_result", None)
 
 
 # ==================================================
@@ -533,8 +556,7 @@ with tab4:
 # FOOTER
 # --------------------------------------------------
 
+
 st.divider()
 
-st.caption(
-    "ChronosMatch | Python • FastAPI • SQLite • Streamlit"
-)
+st.caption("ChronosMatch")
